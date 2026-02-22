@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import InputComponent from "../components/CounterComps/InputComponent";
 import TemplateContainer from "../components/CounterComps/TemplateContainer";
 import ActionBtn from "../components/CounterComps/ActionBtn";
@@ -59,6 +59,29 @@ const Counter = () => {
   const [mainState, setMainState] = useState(10);
   const [totalSecs, setTotalSecs] = useState(600);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const wasRunningRef = useRef(false);
+
+  const playCompletionSound = useCallback(() => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+      notes.forEach((freq, i) => {
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        const startTime = audioCtx.currentTime + i * 0.15;
+        gainNode.gain.setValueAtTime(0.3, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+        oscillator.start(startTime);
+        oscillator.stop(startTime + 0.4);
+      });
+    } catch (e) {
+      // Web Audio API not available; silently ignore
+    }
+  }, []);
 
   const handleMainInputChange = (e) => {
     const parsed = parseMinutes(e.target.value);
@@ -153,14 +176,19 @@ const Counter = () => {
   useEffect(() => {
     let timerId = null;
     if (isRunning && totalSecs > 0) {
+      wasRunningRef.current = true;
       timerId = setInterval(() => {
         setTotalSecs((prev) => prev - 1);
       }, 1000);
     } else if (totalSecs === 0) {
+      if (wasRunningRef.current) {
+        playCompletionSound();
+        wasRunningRef.current = false;
+      }
       setIsRunning(false);
     }
     return () => clearInterval(timerId);
-  }, [isRunning, totalSecs]);
+  }, [isRunning, totalSecs, playCompletionSound]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
